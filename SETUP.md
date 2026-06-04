@@ -4,7 +4,7 @@ Run this once. After that, `python main.py cli` is your daily driver.
 
 ## Prerequisites
 
-- Python 3.11+ (3.13 is what we test against)
+- Python 3.11, 3.12, or 3.13 — all work for Sprint 1/2 deps. **Python 3.12 recommended** when we get to Sprint 3 (numpy/pandas/pandas-ta ecosystem is most settled there).
 - Docker Desktop (running)
 - ~10 GB free disk for the Llama model + Neo4j volume
 
@@ -14,8 +14,11 @@ Run this once. After that, `python main.py cli` is your daily driver.
 # from the repo root
 python -m venv .venv
 .venv\Scripts\activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
+
+> The data-stack deps (numpy, pandas, yfinance, pandas-ta, FastAPI, etc.) live in **`requirements-data.txt`** and are only needed from Sprint 3 onwards. Install them later with `pip install -r requirements-data.txt`. Splitting them keeps the Sprint 1 install fast and avoids numpy build pain on Python 3.13.
 
 ## 2. Local infrastructure
 

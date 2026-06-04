@@ -1,0 +1,30 @@
+# Karna — Sprint 3+ market-data & trading-analytics stack.
+# Install once we reach Sprint 3 (market data integration).
+#
+# Heads-up on Python 3.13:
+#   - numpy 2.x and pandas 2.2.3 have working 3.13 wheels (no compilation).
+#   - pandas-ta 0.3.14b0 (the only PyPI release) is broken on numpy 2.x
+#     because it imports the removed `np.NaN`. We work around that by
+#     pinning the patched master branch from GitHub.
+#   - If anything here gives you trouble, drop to Python 3.12 — the entire
+#     scientific-Python stack is rock solid there.
+
+# ---- Sprint 3: market data ----
+numpy==2.1.3
+pandas==2.2.3
+yfinance==0.2.43
+jugaad-data==0.27
+nsetools==1.0.11
+
+# Technical indicators. Using the patched master commit because the PyPI
+# release is incompatible with numpy 2.x.
+pandas-ta @ git+https://github.com/twopirllc/pandas-ta.git@development
+
+# ---- Sprint 3+: browser ops ----
+playwright==1.47.0
+
+# ---- Sprint 5+: dashboard + API ----
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+plotly==5.24.1
+jinja2==3.1.4
