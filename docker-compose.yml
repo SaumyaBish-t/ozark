@@ -21,7 +21,7 @@ services:
       - neo4j_logs:/logs
 
   chromadb:
-    image: chromadb/chroma:0.5.15
+    image: chromadb/chroma:0.5.23
     container_name: karna-chromadb
     restart: unless-stopped
     ports:
