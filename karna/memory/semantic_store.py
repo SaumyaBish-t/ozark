@@ -21,13 +21,31 @@ from typing import Optional
 
 # Silence ChromaDB's posthog telemetry — it ships with a SDK version that
 # raises "capture() takes 1 positional argument but 3 were given" warnings
-# on every run. Disable before importing chromadb so the patch sticks.
+# on every run, including per-add. Several hooks need to be disabled because
+# the env var alone misses CollectionAddEvent and friends.
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 os.environ.setdefault("CHROMA_TELEMETRY_IMPL", "none")
 
 import chromadb
 from chromadb import EmbeddingFunction, Embeddings
 from chromadb.config import Settings as ChromaSettings
+
+# Belt and braces: kill the telemetry loggers that print despite the flag.
+for _name in (
+    "chromadb.telemetry",
+    "chromadb.telemetry.product",
+    "chromadb.telemetry.product.posthog",
+):
+    logging.getLogger(_name).setLevel(logging.CRITICAL)
+
+# Last resort — the "Failed to send telemetry event" messages come from
+# print() inside chromadb's Posthog wrapper, not from the logger. Stub out
+# the capture method directly so it can't print anything.
+try:
+    from chromadb.telemetry.product.posthog import Posthog as _ChromaPosthog
+    _ChromaPosthog.capture = lambda *a, **kw: None
+except Exception:
+    pass
 
 from karna.config import settings
 from karna.llm.ollama import OllamaClient, get_client as get_ollama

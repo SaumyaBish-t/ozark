@@ -38,10 +38,26 @@ class GraphStore:
         user: Optional[str] = None,
         password: Optional[str] = None,
     ):
-        self._driver: Driver = GraphDatabase.driver(
-            uri or settings.neo4j_uri,
-            auth=(user or settings.neo4j_user, password or settings.neo4j_password),
-        )
+        # Silence "UnknownRelationshipTypeWarning" / "UnknownPropertyKeyWarning"
+        # spam — these fire when querying graph schema before quizzes have
+        # populated UNDERSTANDS edges. The query itself is correct (OPTIONAL MATCH
+        # handles the missing pattern); Neo4j is just being chatty about a
+        # not-yet-existing schema element. Drop notifications below WARNING.
+        try:
+            self._driver: Driver = GraphDatabase.driver(
+                uri or settings.neo4j_uri,
+                auth=(user or settings.neo4j_user, password or settings.neo4j_password),
+                notifications_min_severity="OFF",
+            )
+        except TypeError:
+            # Older driver builds that don't know the kwarg — fall back.
+            self._driver = GraphDatabase.driver(
+                uri or settings.neo4j_uri,
+                auth=(user or settings.neo4j_user, password or settings.neo4j_password),
+            )
+        # And mute the neo4j notification logger as a second layer of defence.
+        import logging as _logging
+        _logging.getLogger("neo4j.notifications").setLevel(_logging.ERROR)
 
     def close(self) -> None:
         self._driver.close()
