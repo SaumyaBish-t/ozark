@@ -16,10 +16,18 @@ embedding inference in-process so we don't depend on a cloud service.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Optional
+
+# Silence ChromaDB's posthog telemetry — it ships with a SDK version that
+# raises "capture() takes 1 positional argument but 3 were given" warnings
+# on every run. Disable before importing chromadb so the patch sticks.
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+os.environ.setdefault("CHROMA_TELEMETRY_IMPL", "none")
 
 import chromadb
 from chromadb import EmbeddingFunction, Embeddings
+from chromadb.config import Settings as ChromaSettings
 
 from karna.config import settings
 from karna.llm.ollama import OllamaClient, get_client as get_ollama
@@ -65,16 +73,18 @@ class SemanticStore:
         llm: Optional[OllamaClient] = None,
     ):
         chosen_mode = (mode or settings.chroma_mode).lower()
+        chroma_cfg = ChromaSettings(anonymized_telemetry=False)
         if chosen_mode == "http":
             self._client = chromadb.HttpClient(
                 host=host or settings.chroma_host,
                 port=port or settings.chroma_port,
+                settings=chroma_cfg,
             )
         else:
             # Embedded persistent client — writes to disk, no server needed.
             data_dir = settings.karna_data_dir / "chroma"
             data_dir.mkdir(parents=True, exist_ok=True)
-            self._client = chromadb.PersistentClient(path=str(data_dir))
+            self._client = chromadb.PersistentClient(path=str(data_dir), settings=chroma_cfg)
 
         self._embed = OllamaEmbeddingFunction(llm=llm)
         # get_or_create_collection is idempotent — safe across restarts.
