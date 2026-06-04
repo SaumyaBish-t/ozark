@@ -48,20 +48,34 @@ class OllamaEmbeddingFunction(EmbeddingFunction):
 class SemanticStore:
     """Karna's ChromaDB wrapper.
 
-    Cheap to instantiate. Reuses HTTP connections to the chromadb container.
+    Defaults to **embedded** mode — ChromaDB runs in-process, writing to
+    `settings.karna_data_dir / "chroma"`. No daemon, no Docker container,
+    no network hop. Set CHROMA_MODE=http (and CHROMA_HOST/PORT) in .env
+    if you want to talk to a remote Chroma server instead.
+
     `add()` mirrors a row from SessionStore — same turn_id used as the Chroma id.
     """
 
     def __init__(
         self,
+        *,
+        mode: Optional[str] = None,
         host: Optional[str] = None,
         port: Optional[int] = None,
         llm: Optional[OllamaClient] = None,
     ):
-        self._client = chromadb.HttpClient(
-            host=host or settings.chroma_host,
-            port=port or settings.chroma_port,
-        )
+        chosen_mode = (mode or settings.chroma_mode).lower()
+        if chosen_mode == "http":
+            self._client = chromadb.HttpClient(
+                host=host or settings.chroma_host,
+                port=port or settings.chroma_port,
+            )
+        else:
+            # Embedded persistent client — writes to disk, no server needed.
+            data_dir = settings.karna_data_dir / "chroma"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            self._client = chromadb.PersistentClient(path=str(data_dir))
+
         self._embed = OllamaEmbeddingFunction(llm=llm)
         # get_or_create_collection is idempotent — safe across restarts.
         self._coll = self._client.get_or_create_collection(

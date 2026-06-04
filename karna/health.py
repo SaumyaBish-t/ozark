@@ -49,12 +49,22 @@ def _check_neo4j() -> tuple[bool, str]:
 
 
 def _check_chromadb() -> tuple[bool, str]:
+    mode = settings.chroma_mode.lower()
+    if mode == "http":
+        try:
+            with socket.create_connection((settings.chroma_host, settings.chroma_port), timeout=2.0):
+                pass
+            return True, f"http mode, port {settings.chroma_port} open"
+        except Exception as e:
+            return False, f"http mode unreachable: {e}"
+    # Embedded mode — just verify we can open a PersistentClient on disk.
     try:
-        with socket.create_connection((settings.chroma_host, settings.chroma_port), timeout=2.0):
-            pass
-        return True, f"port {settings.chroma_port} open"
+        from karna.memory.semantic_store import SemanticStore
+        s = SemanticStore()
+        n = s.count()
+        return True, f"embedded mode, {n} docs indexed at {settings.karna_data_dir / 'chroma'}"
     except Exception as e:
-        return False, f"unreachable: {e}"
+        return False, f"embedded init failed: {e}"
 
 
 def _check_sqlite() -> tuple[bool, str]:

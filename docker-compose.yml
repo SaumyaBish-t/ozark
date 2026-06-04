@@ -20,17 +20,19 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
 
-  chromadb:
-    image: chromadb/chroma:0.5.23
-    container_name: karna-chromadb
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      - IS_PERSISTENT=TRUE
-      - ANONYMIZED_TELEMETRY=FALSE
-    volumes:
-      - chroma_data:/chroma/chroma
+  # ChromaDB now runs embedded in-process by default. Re-enable this block
+  # only if you want a shared/remote Chroma server (and set CHROMA_MODE=http).
+  # chromadb:
+  #   image: chromadb/chroma:0.5.23
+  #   container_name: karna-chromadb
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - IS_PERSISTENT=TRUE
+  #     - ANONYMIZED_TELEMETRY=FALSE
+  #   volumes:
+  #     - chroma_data:/chroma/chroma
 
   ollama:
     image: ollama/ollama:0.3.12
@@ -47,5 +49,5 @@ services:
 volumes:
   neo4j_data:
   neo4j_logs:
-  chroma_data:
+  # chroma_data:   # only needed if you re-enable the chromadb service above
   ollama_data:

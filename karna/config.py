@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     neo4j_password: str = "karnapassword"
 
     # ---- ChromaDB ----
+    # "embedded" = in-process (no daemon, default).
+    # "http"     = talk to a remote Chroma server (set host/port).
+    chroma_mode: str = "embedded"
     chroma_host: str = "localhost"
     chroma_port: int = 8000
 
