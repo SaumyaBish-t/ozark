@@ -28,7 +28,8 @@ from telegram.ext import (
 
 from karna.agent.core import Agent, AgentReply
 from karna.config import settings
-from karna.memory.session_store import SessionStore
+from karna.memory.memory import build_memory
+from karna.memory.subscriptions import Subscriptions
 
 
 log = logging.getLogger(__name__)
@@ -49,9 +50,9 @@ def _try_graph_store():
 # ---------- bot wiring ----------
 
 def _build_agent() -> Agent:
-    session = SessionStore()
+    memory = build_memory()
     graph = _try_graph_store()
-    return Agent(session_store=session, graph_store=graph)
+    return Agent(memory=memory, graph_store=graph)
 
 
 def _is_allowed(user_id: int) -> bool:
@@ -80,9 +81,10 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not update.effective_user or not _is_allowed(update.effective_user.id):
         return
     agent: Agent = context.application.bot_data["agent"]
-    n_turns = agent.session_store.count()
+    n_turns = agent.memory.count()
+    sem_count = agent.memory.semantic.count() if agent.memory.semantic else 0
     await update.message.reply_text(
-        f"Total stored turns: {n_turns}\nModel: {settings.ollama_model}"
+        f"Stored turns: {n_turns}\nSemantic-indexed: {sem_count}\nModel: {settings.ollama_model}"
     )
 
 
@@ -97,7 +99,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     agent: Agent = context.application.bot_data["agent"]
+    subs: Subscriptions = context.application.bot_data["subs"]
     session_id = _session_id_for_chat(chat.id)
+
+    # Record where to reach this user for proactive deliveries (quizzes, digests).
+    # Cheap upsert — runs every message but write is small.
+    subs.record_telegram(str(user.id), chat.id)
 
     await context.bot.send_chat_action(chat.id, ChatAction.TYPING)
 
@@ -143,6 +150,7 @@ def run() -> None:
         .build()
     )
     app.bot_data["agent"] = _build_agent()
+    app.bot_data["subs"] = Subscriptions()
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("status", cmd_status))

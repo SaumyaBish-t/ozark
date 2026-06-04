@@ -1,0 +1,49 @@
+# Versioned skill metadata. The runtime in karna/skills/quiz.py loads this
+# to find the active version's prompts and tunables. Sprint 6 will wire
+# A/B evaluation and auto-promotion to switch the `active` pointer.
+
+skill: generate_quiz
+version: 1
+depends_on: []
+avg_tokens: 220
+avg_quality: null   # filled in after evaluator collects samples
+active: v1
+
+versions:
+  v1:
+    status: active
+    method: "decaying-concept + LLM-generated Q + LLM-judged A"
+    quality: null
+    question_prompt: |
+      You are creating a quick comprehension check for a trading student.
+
+      Topic: {concept_name}
+      Topic summary: {concept_summary}
+      Their last shown level on this topic: {last_level}
+
+      Write ONE question that:
+        - Tests practical understanding, not memorization of definitions
+        - Can be answered in 1-3 sentences
+        - Is appropriate for the student's level ({last_level})
+        - Uses an Indian-market example if it helps (e.g. RELIANCE, TCS, NIFTY)
+
+      Output JUST the question. No preamble, no labels, no markdown.
+
+    judge_prompt: |
+      You are grading a trading student's answer.
+
+      Topic: {concept_name}
+      Question: {question}
+      Student's answer: {answer}
+
+      Grade on this scale, returning EXACTLY one of the labels on the first line:
+        mastered   — answer is correct, complete, and shows real understanding
+        solid      — correct on the main point but missing depth or precision
+        reviewed   — partial understanding, some confusion
+        initial    — substantially wrong or off-topic
+
+      Format:
+        Line 1: the label
+        Line 2-3: one or two sentences of specific feedback to the student
+
+      No extra formatting, no markdown headers.

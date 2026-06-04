@@ -20,7 +20,7 @@ from rich.panel import Panel
 
 from karna.agent.core import Agent, AgentReply, detect_concepts, new_session_id
 from karna.config import settings
-from karna.memory.session_store import SessionStore
+from karna.memory.memory import build_memory
 
 
 console = Console()
@@ -44,9 +44,9 @@ def run(user_id: Optional[str] = None) -> None:
     settings.ensure_dirs()
     user_id = user_id or "local-user"
 
-    session = SessionStore()
+    memory = build_memory()
     graph = _try_graph_store()
-    agent = Agent(session_store=session, graph_store=graph)
+    agent = Agent(memory=memory, graph_store=graph)
 
     session_id = new_session_id()
 
@@ -74,12 +74,20 @@ def run(user_id: Optional[str] = None) -> None:
             console.print(f"[cyan]new session:[/cyan] {session_id}")
             continue
         if msg == "/history":
-            for t in session.history(session_id, limit=50):
+            for t in memory.history(session_id, limit=50):
                 console.print(f"[dim]{t.role}:[/dim] {t.content}")
             continue
         if msg.startswith("/concepts "):
             hits = detect_concepts(msg[len("/concepts "):])
             console.print(f"detected: {hits or '(none)'}")
+            continue
+        if msg.startswith("/recall "):
+            q = msg[len("/recall "):]
+            for r in memory.recall(q, k=5, user_id=user_id):
+                console.print(
+                    f"[dim]{r.source} {r.score:.2f} ret={r.retention:.2f}:[/dim] "
+                    f"({r.role}) {r.content[:140]}"
+                )
             continue
 
         # ---- normal turn ----
@@ -94,6 +102,8 @@ def run(user_id: Optional[str] = None) -> None:
             meta += f" | concepts={','.join(reply.mentioned_concepts)}"
         if reply.prereq_focus:
             meta += f" | prereqs={','.join(reply.prereq_focus[:3])}"
+        if reply.recalled:
+            meta += f" | recalled={len(reply.recalled)}"
         meta += "[/dim]"
 
         console.print(meta)

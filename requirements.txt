@@ -19,6 +19,7 @@ rich==13.8.1
 chromadb==0.5.23
 sentence-transformers==3.2.1
 apscheduler==3.10.4
+pyyaml==6.0.2
 
 # ---- Optional fallback LLM (used from Sprint 1 when complex reasoning needed) ----
 openai==1.51.2

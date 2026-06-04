@@ -3,7 +3,9 @@
 Usage:
     python main.py cli         # interactive terminal chat (works without Telegram token)
     python main.py telegram    # run Telegram bot (needs TELEGRAM_BOT_TOKEN in .env)
+    python main.py scheduler   # run APScheduler (daily decay + hourly review checks)
     python main.py seed-graph  # seed Neo4j with the trading concept graph
+    python main.py decay       # run a one-shot Ebbinghaus decay sweep
     python main.py health      # check Ollama / Neo4j / SQLite are reachable
 """
 
@@ -47,6 +49,18 @@ def main() -> int:
         n_nodes, n_edges = gs.seed(CONCEPT_TREE)
         print(f"Seeded {n_nodes} concept nodes and {n_edges} prerequisite edges.")
         gs.close()
+        return 0
+
+    if cmd == "scheduler":
+        from karna.scheduler.cron import run as run_scheduler
+        run_scheduler()
+        return 0
+
+    if cmd == "decay":
+        from karna.memory.forgetting import ForgettingEngine
+        engine = ForgettingEngine()
+        report = engine.run_once()
+        print(report)
         return 0
 
     if cmd == "health":

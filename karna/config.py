@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # ---- LLM ----
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b"
+    ollama_embed_model: str = "nomic-embed-text"  # 768-dim, ~270MB, fast
     openai_api_key: Optional[str] = None
     openai_fallback_model: str = "gpt-4o-mini"
 

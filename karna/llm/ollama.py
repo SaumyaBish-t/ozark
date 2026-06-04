@@ -100,6 +100,42 @@ class OllamaClient:
         except httpx.HTTPError as e:
             raise OllamaError(f"Ollama stream failed: {e}") from e
 
+    def embed(
+        self,
+        text: str | list[str],
+        *,
+        model: Optional[str] = None,
+    ) -> list[list[float]]:
+        """Embed text(s) into vectors. Returns a list of vectors (one per input).
+
+        Uses the embedding model from settings.ollama_embed_model unless
+        overridden. Caller passes either a single string (gets a 1-element
+        list back) or a list of strings.
+        """
+        from karna.config import settings  # local import to avoid cycle on module load
+
+        single = isinstance(text, str)
+        texts = [text] if single else list(text)
+        target_model = model or settings.ollama_embed_model
+
+        # Ollama's /api/embeddings is one-prompt-at-a-time. For batches we
+        # loop — Karna's embedding volume is low and serial is fine.
+        out: list[list[float]] = []
+        try:
+            for t in texts:
+                r = self._client.post(
+                    f"{self.host}/api/embeddings",
+                    json={"model": target_model, "prompt": t},
+                )
+                r.raise_for_status()
+                vec = r.json().get("embedding")
+                if not vec:
+                    raise OllamaError(f"Ollama returned empty embedding for: {t[:60]!r}")
+                out.append(vec)
+        except httpx.HTTPError as e:
+            raise OllamaError(f"Ollama embed failed: {e}") from e
+        return out
+
     def close(self) -> None:
         self._client.close()
 

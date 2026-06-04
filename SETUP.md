@@ -33,6 +33,11 @@ This brings up:
 - ChromaDB on `http://localhost:8000`
 - Ollama on `http://localhost:11434`
 
+You also need an **embedding model** pulled for ChromaDB to index turns. It's small (~270 MB):
+```powershell
+ollama pull nomic-embed-text
+```
+
 ## 3. Configuration
 
 ```powershell

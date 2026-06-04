@@ -1,0 +1,167 @@
+"""Layer 2 memory — ChromaDB for dense semantic search.
+
+Lives alongside the SQLite session store. Same `turn_id` identifies the
+same fact in both layers — that's the join key.
+
+Why both layers?
+    - SQLite FTS5 is great when the user uses the same words. Misses synonyms.
+    - ChromaDB embeds meaning, finds things lexically different but related
+      ("how do I size my position?" → retrieves a turn about "risk per trade").
+    - Together they cover keyword search + semantic search without picking one.
+
+Embeddings come from local Ollama (nomic-embed-text by default). Keeping
+embedding inference in-process so we don't depend on a cloud service.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+import chromadb
+from chromadb import EmbeddingFunction, Embeddings
+
+from karna.config import settings
+from karna.llm.ollama import OllamaClient, get_client as get_ollama
+
+
+log = logging.getLogger(__name__)
+
+
+COLLECTION_NAME = "karna_turns"
+
+
+class OllamaEmbeddingFunction(EmbeddingFunction):
+    """Adapter so Chroma calls our local Ollama for embeddings.
+
+    Chroma's interface: __call__(input: list[str]) -> Embeddings.
+    """
+
+    def __init__(self, llm: Optional[OllamaClient] = None):
+        self._llm = llm or get_ollama()
+
+    def __call__(self, input: list[str]) -> Embeddings:  # noqa: A002 — name forced by chromadb interface
+        # OllamaClient.embed returns list[list[float]] which is exactly Embeddings.
+        return self._llm.embed(input)
+
+
+class SemanticStore:
+    """Karna's ChromaDB wrapper.
+
+    Cheap to instantiate. Reuses HTTP connections to the chromadb container.
+    `add()` mirrors a row from SessionStore — same turn_id used as the Chroma id.
+    """
+
+    def __init__(
+        self,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        llm: Optional[OllamaClient] = None,
+    ):
+        self._client = chromadb.HttpClient(
+            host=host or settings.chroma_host,
+            port=port or settings.chroma_port,
+        )
+        self._embed = OllamaEmbeddingFunction(llm=llm)
+        # get_or_create_collection is idempotent — safe across restarts.
+        self._coll = self._client.get_or_create_collection(
+            name=COLLECTION_NAME,
+            embedding_function=self._embed,
+            metadata={"hnsw:space": "cosine"},
+        )
+
+    # ---------- public API ----------
+
+    def add(
+        self,
+        *,
+        turn_id: str,
+        content: str,
+        session_id: str,
+        role: str,
+        user_id: Optional[str] = None,
+        scope: str = "session",
+        created_at: Optional[float] = None,
+    ) -> None:
+        """Insert a turn. ChromaDB embeds the content via our Ollama function."""
+        metadata = {
+            "session_id": session_id,
+            "role": role,
+            "scope": scope,
+        }
+        if user_id:
+            metadata["user_id"] = user_id
+        if created_at is not None:
+            metadata["created_at"] = created_at
+
+        self._coll.add(
+            ids=[turn_id],
+            documents=[content],
+            metadatas=[metadata],
+        )
+
+    def search(
+        self,
+        query: str,
+        *,
+        k: int = 5,
+        scope: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> list[dict]:
+        """Return top-k semantically similar turns.
+
+        Each result: {"id": turn_id, "content": str, "metadata": dict, "distance": float}.
+        Distance is cosine — lower means more similar.
+        """
+        where: dict = {}
+        if scope:
+            where["scope"] = scope
+        if user_id:
+            where["user_id"] = user_id
+
+        result = self._coll.query(
+            query_texts=[query],
+            n_results=k,
+            where=where or None,
+        )
+
+        out: list[dict] = []
+        # Chroma returns lists-of-lists keyed by query (we only sent one query).
+        ids = (result.get("ids") or [[]])[0]
+        docs = (result.get("documents") or [[]])[0]
+        metas = (result.get("metadatas") or [[]])[0]
+        dists = (result.get("distances") or [[]])[0]
+        for i, tid in enumerate(ids):
+            out.append({
+                "id": tid,
+                "content": docs[i] if i < len(docs) else "",
+                "metadata": metas[i] if i < len(metas) else {},
+                "distance": dists[i] if i < len(dists) else None,
+            })
+        return out
+
+    def nearest_neighbors(self, turn_id: str, k: int = 5) -> list[str]:
+        """Find ids of the k turns most semantically similar to `turn_id`.
+
+        Used by the consolidation engine to boost related memories on access.
+        Excludes the source turn itself from the result.
+        """
+        # Fetch the source doc by id, then re-query with its content.
+        got = self._coll.get(ids=[turn_id], include=["documents"])
+        docs = got.get("documents") or []
+        if not docs:
+            return []
+        source_doc = docs[0]
+
+        result = self._coll.query(
+            query_texts=[source_doc],
+            n_results=k + 1,  # +1 because the source itself will show up
+        )
+        ids = (result.get("ids") or [[]])[0]
+        return [i for i in ids if i != turn_id][:k]
+
+    def delete(self, turn_id: str) -> None:
+        self._coll.delete(ids=[turn_id])
+
+    def count(self) -> int:
+        return self._coll.count()
