@@ -13,6 +13,8 @@
 
 An open-source AI agent that lives on your infrastructure, remembers intelligently (not everything), learns reusable skills that version and A/B test themselves, reasons over a knowledge graph of your life/work, and gets measurably better every week — deployed on Telegram. Primary use case: learn trading from zero → paper trade with data tracking → live trade with execution.
 
+> **Getting started?** See [SETUP.md](./SETUP.md). Current build status: **Sprint 1 complete** — scaffolding, Ollama wrapper, SQLite FTS5 session store, Neo4j concept-graph seed, CLI + Telegram connectors, agent core with prerequisite-aware teaching.
+
 ---
 
 ## Tech stack

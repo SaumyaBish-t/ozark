@@ -1,0 +1,51 @@
+# Local infra for Karna. Run with: docker compose up -d
+# Stop with: docker compose down  (data persists in named volumes)
+# Wipe everything: docker compose down -v
+version: "3.9"
+
+services:
+  neo4j:
+    image: neo4j:5.24-community
+    container_name: karna-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"   # HTTP browser UI -> http://localhost:7474
+      - "7687:7687"   # Bolt protocol (driver connects here)
+    environment:
+      - NEO4J_AUTH=neo4j/karnapassword
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+
+  chromadb:
+    image: chromadb/chroma:0.5.15
+    container_name: karna-chromadb
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    volumes:
+      - chroma_data:/chroma/chroma
+
+  ollama:
+    image: ollama/ollama:0.3.12
+    container_name: karna-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # After `docker compose up -d`, pull the model once:
+    #   docker exec -it karna-ollama ollama pull llama3.1:8b
+    # (or mistral:7b if RAM is tight)
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  chroma_data:
+  ollama_data:
