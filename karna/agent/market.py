@@ -32,41 +32,71 @@ log = logging.getLogger(__name__)
 
 # ---------- ticker extraction ----------
 
-# NSE tickers are uppercase, 1-15 chars, letters/digits/&. To avoid false
-# positives we require either (a) explicit cue words nearby or (b) uppercase.
-# Inline (?i:...) makes ONLY the cue words case-insensitive — the capture
-# group stays strict uppercase, otherwise "of RELIANCE" would capture "of".
-_CUE_TICKER = re.compile(
-    r"\b(?i:on|for|of|in|show|chart|price|quote)\s+([A-Z][A-Z0-9&]{1,14})\b",
-)
+# Cue words that often precede a ticker. We split the message into tokens
+# and walk them — single regex finditer can't backtrack past a failed
+# candidate (e.g. "rsi on reliance" matches cue=rsi, capture=on → "on" is
+# a stop-word → finditer never tries cue=on, capture=reliance).
+_CUE_WORDS = {
+    "on", "for", "of", "in", "show", "chart", "price", "quote",
+    "rsi", "macd", "bollinger", "bb", "atr", "sma", "ema",
+}
+# Used by ALL-CAPS fallback ("HDFCBANK is consolidating").
 _ALL_CAPS_TICKER = re.compile(r"\b([A-Z][A-Z0-9&]{2,14})\b")
+# What a ticker token can look like (case-insensitive, 2-15 chars).
+_TICKER_SHAPE = re.compile(r"^[A-Za-z][A-Za-z0-9&]{1,14}$")
 
-# Common English words that match the ticker regex — exclude them.
+# Words that look like tickers but aren't. Stored UPPERCASE; we compare
+# against the uppercase form so lowercase variants ("the", "what") are
+# caught too.
 _STOP_WORDS = {
-    "RSI", "MACD", "ATR", "SMA", "EMA", "BB", "BSE", "NSE", "NIFTY", "BANKNIFTY",
-    "USD", "INR", "OK", "OHLC", "OHLCV", "API", "VWAP", "ETF", "IPO", "FII", "DII",
-    "AND", "THE", "FOR", "WITH", "FROM", "WHAT", "WHY", "HOW", "WHEN",
+    # Indicator / domain abbreviations
+    "RSI", "MACD", "ATR", "SMA", "EMA", "BB", "VWAP", "ADX", "OHLC", "OHLCV",
+    # Markets / instruments
+    "BSE", "NSE", "NIFTY", "BANKNIFTY", "SENSEX", "USD", "INR", "ETF", "IPO",
+    "FII", "DII", "FNO", "FUT", "CALL", "PUT",
+    # Common English that survives the regex
+    "OK", "API", "AND", "THE", "FOR", "WITH", "FROM", "WHAT", "WHY", "HOW",
+    "WHEN", "WHERE", "TODAY", "NOW", "ON", "OFF", "UP", "DOWN", "YES", "NO",
+    "PRICE", "CHART", "QUOTE", "TREND", "HIGH", "LOW", "OPEN", "CLOSE", "VOLUME",
+    "STOCK", "MARKET", "INDIA", "INDIAN",
 }
 
 
 def extract_ticker(message: str) -> Optional[str]:
     """Best-effort ticker extraction from free-form text.
 
-    Prefers cue-word matches, falls back to uppercase tokens. Returns
-    None when no plausible ticker is found.
+    Two passes:
+      1. Cue-based — walk tokens; when one is a cue word, examine the
+         next non-cue token. Accepts any case, uppercases the result.
+         Handles "rsi on reliance" (phone-typed all-lowercase) correctly.
+      2. ALL-CAPS fallback for messages like "HDFCBANK is consolidating".
     """
-    m = _CUE_TICKER.search(message)
-    if m:
-        cand = m.group(1).upper()
-        if cand not in _STOP_WORDS:
+    # Tokenise on whitespace + punctuation, keep word characters.
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9&]*", message)
+    lowers = [t.lower() for t in tokens]
+
+    # Pass 1 — for each cue word, scan forward for the first viable candidate.
+    # Minimum 3 chars: NSE's shortest tickers are 3 (ITC, TCS, …). This rules
+    # out pronouns / filler ("show me TCS" → skip "me", return "TCS").
+    for i, lo in enumerate(lowers):
+        if lo not in _CUE_WORDS:
+            continue
+        for j in range(i + 1, len(tokens)):
+            cand = tokens[j].upper()
+            if lowers[j] in _CUE_WORDS:
+                continue  # skip chained cues ("price of TCS" → skip "of")
+            if cand in _STOP_WORDS:
+                continue
+            if len(cand) < 3:
+                continue
+            if not _TICKER_SHAPE.match(cand):
+                continue
             return cand
-    # Fall back to scanning ALL-CAPS tokens, skipping stop-words / known indicator names.
+
+    # Pass 2 — strict ALL-CAPS tokens elsewhere in the message.
     for cand in _ALL_CAPS_TICKER.findall(message):
         cand = cand.upper()
-        if cand in _STOP_WORDS:
-            continue
-        # Reject if it's the message's only uppercase word AND short — likely not a ticker.
-        if len(cand) < 3:
+        if cand in _STOP_WORDS or len(cand) < 3:
             continue
         return cand
     return None

@@ -27,6 +27,13 @@ def test_extract_ticker_with_cue() -> None:
     assert extract_ticker("show me TCS chart") == "TCS"
 
 
+def test_extract_ticker_lowercase_via_cue() -> None:
+    # Phone users type lowercase — must still resolve to upper.
+    assert extract_ticker("rsi on reliance") == "RELIANCE"
+    assert extract_ticker("what is the price of tcs") == "TCS"
+    assert extract_ticker("show me macd on infy") == "INFY"
+
+
 def test_extract_ticker_uppercase_fallback() -> None:
     assert extract_ticker("HDFCBANK is consolidating") == "HDFCBANK"
 
@@ -35,6 +42,7 @@ def test_extract_ticker_rejects_stop_words() -> None:
     # "RSI" and "NSE" alone should not be treated as tickers
     assert extract_ticker("what is RSI") is None
     assert extract_ticker("how does NSE work") is None
+    assert extract_ticker("what is the price today") is None
 
 
 def test_extract_indicators() -> None:
