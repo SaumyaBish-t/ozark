@@ -97,7 +97,13 @@ class SessionStore:
 
     def _connect(self) -> sqlite3.Connection:
         if self._conn is None:
-            conn = sqlite3.connect(str(self.db_path))
+            # check_same_thread=False lets the Telegram bot's worker
+            # thread reuse the connection that the main thread opened.
+            # Safe because:
+            #   - WAL mode allows concurrent readers + serialised writer
+            #   - python-telegram-bot processes messages one at a time
+            #   - we hold no cross-statement cursors
+            conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL;")
             conn.execute("PRAGMA foreign_keys=ON;")
