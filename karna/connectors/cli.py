@@ -19,8 +19,11 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from karna.agent.core import Agent, AgentReply, detect_concepts, new_session_id
+from karna.agent.market import format_indicator, format_quote
 from karna.config import settings
+from karna.data.router import get_router as get_data_router
 from karna.memory.memory import build_memory
+from karna.trading import indicators
 
 
 console = Console()
@@ -90,6 +93,41 @@ def run(user_id: Optional[str] = None) -> None:
                 )
             continue
 
+        # ---- market data commands (deterministic, no LLM) ----
+        if msg.startswith("/price "):
+            ticker = msg[len("/price "):].strip().upper()
+            try:
+                q = get_data_router().get_quote(ticker)
+                console.print(format_quote(q))
+            except Exception as e:
+                console.print(f"[red]price fetch failed:[/red] {e}")
+            continue
+        if any(msg.startswith(f"/{ind} ") for ind in ("rsi", "macd", "bb", "atr", "sma", "ema")):
+            head, _, rest = msg[1:].partition(" ")
+            ticker = rest.strip().upper()
+            try:
+                df = get_data_router().get_ohlcv(ticker, days=120)
+                result = indicators.compute(head, df)
+                console.print(format_indicator(head, result))
+            except Exception as e:
+                console.print(f"[red]{head} fetch failed:[/red] {e}")
+            continue
+        if msg.startswith("/chart "):
+            ticker = msg[len("/chart "):].strip().upper()
+            try:
+                df = get_data_router().get_ohlcv(ticker, days=15).tail(10)
+                console.print(f"[bold]{ticker}[/bold] last 10 sessions:")
+                for _, r in df.iterrows():
+                    console.print(
+                        f"  {r['Date'].date()}  "
+                        f"O {r['Open']:>9.2f}  H {r['High']:>9.2f}  "
+                        f"L {r['Low']:>9.2f}  C {r['Close']:>9.2f}  "
+                        f"V {int(r['Volume']):>12,}"
+                    )
+            except Exception as e:
+                console.print(f"[red]chart fetch failed:[/red] {e}")
+            continue
+
         # ---- normal turn ----
         try:
             reply: AgentReply = agent.handle(msg, session_id=session_id, user_id=user_id)
@@ -104,6 +142,12 @@ def run(user_id: Optional[str] = None) -> None:
             meta += f" | prereqs={','.join(reply.prereq_focus[:3])}"
         if reply.recalled:
             meta += f" | recalled={len(reply.recalled)}"
+        if reply.market_context is not None:
+            mc = reply.market_context
+            tag = f"market:{mc.ticker}"
+            if mc.indicator_results:
+                tag += f"({','.join(mc.indicator_results.keys())})"
+            meta += f" | {tag}"
         meta += "[/dim]"
 
         console.print(meta)

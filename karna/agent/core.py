@@ -66,6 +66,7 @@ class AgentReply:
     mentioned_concepts: list[str] = field(default_factory=list)
     prereq_focus: list[str] = field(default_factory=list)
     recalled: list[Recall] = field(default_factory=list)
+    market_context: object = None  # karna.agent.market.MarketContext | None
 
 
 class Agent:
@@ -120,6 +121,17 @@ class Agent:
         mentioned = detect_concepts(message)
         prereq_focus = self._collect_prereqs(user_id, mentioned)
 
+        # Market data fetch — only when the router flagged this as such.
+        # Quote + indicators land in the system prompt so the LLM grounds
+        # its reply in real numbers instead of inventing them.
+        market_context = None
+        if routing.intent == "market_query":
+            try:
+                from karna.agent.market import fetch_for_message
+                market_context = fetch_for_message(message)
+            except Exception as e:
+                log.warning("market fetch failed: %s", e)
+
         # Semantic recall — past turns from anywhere relevant to this message.
         # Skip for smalltalk (don't waste embedding calls on "hi").
         recalled: list[Recall] = []
@@ -139,7 +151,9 @@ class Agent:
             except Exception as e:
                 log.debug("consolidation boost failed: %s", e)
 
-        system_prompt = self._build_system_prompt(routing, mentioned, prereq_focus, recalled)
+        system_prompt = self._build_system_prompt(
+            routing, mentioned, prereq_focus, recalled, market_context,
+        )
         history = [t.to_chat_message() for t in self.memory.history(session_id, self.history_window)]
 
         messages = [{"role": "system", "content": system_prompt}, *history]
@@ -159,6 +173,7 @@ class Agent:
             mentioned_concepts=mentioned,
             prereq_focus=prereq_focus,
             recalled=recalled,
+            market_context=market_context,
         )
 
     # ---------- internals ----------
@@ -184,6 +199,7 @@ class Agent:
         mentioned: list[str],
         prereq_focus: list[str],
         recalled: list[Recall],
+        market_context=None,  # karna.agent.market.MarketContext | None
     ) -> str:
         parts = [DEFAULT_TUTOR]
 
@@ -196,6 +212,9 @@ class Agent:
             )
         elif routing.intent == "system":
             parts.append("This is a system/meta command. Respond plainly about what you can and can't do yet.")
+        elif routing.intent == "market_query" and market_context is not None:
+            from karna.agent.market import format_context_for_llm
+            parts.append(format_context_for_llm(market_context))
 
         if mentioned:
             parts.append(f"Concepts the user touched on: {', '.join(mentioned)}.")

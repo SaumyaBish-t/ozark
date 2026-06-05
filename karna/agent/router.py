@@ -17,7 +17,7 @@ from karna.llm.ollama import OllamaClient
 from karna.llm.prompts import ROUTER_CLASSIFY
 
 
-Intent = Literal["question", "task", "trade_action", "system", "smalltalk"]
+Intent = Literal["question", "task", "trade_action", "system", "smalltalk", "market_query"]
 
 
 @dataclass
@@ -58,6 +58,14 @@ def route(message: str, llm: OllamaClient | None = None) -> RoutingResult:
         return RoutingResult("system", 0.95, "regex:system")
     if _SMALLTALK_RE.match(msg) and len(msg) < 40:
         return RoutingResult("smalltalk", 0.85, "regex:smalltalk")
+    # Cheaper than the LLM fallback: check if it looks like a market query
+    # (ticker + market verb) before treating it as a generic question.
+    try:
+        from karna.agent.market import looks_like_market_query
+        if looks_like_market_query(msg):
+            return RoutingResult("market_query", 0.8, "regex:market")
+    except Exception:
+        pass
     if _QUESTION_HINTS.search(msg):
         return RoutingResult("question", 0.75, "regex:question")
 
