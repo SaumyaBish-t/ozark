@@ -83,7 +83,10 @@ class Memory:
             scope=scope,
             pinned=pinned,
         )
-        if self._semantic_enabled:
+        # Skip L2 embedding for empty/whitespace content — Ollama's embed
+        # endpoint refuses empty strings, and a vectorless row in Chroma
+        # would never match anyway.
+        if self._semantic_enabled and content and content.strip():
             try:
                 self.semantic.add(
                     turn_id=turn_id,

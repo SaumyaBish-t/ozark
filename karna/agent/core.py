@@ -159,6 +159,20 @@ class Agent:
         messages = [{"role": "system", "content": system_prompt}, *history]
         reply_text = self.llm.chat(messages, temperature=0.4)
 
+        # qwen3.5 on CPU occasionally returns an empty string when overloaded —
+        # one quick retry catches the transient case. If we still get nothing,
+        # surface a useful message instead of silently storing "".
+        if not reply_text or not reply_text.strip():
+            log.warning("LLM returned empty reply, retrying once")
+            reply_text = self.llm.chat(messages, temperature=0.4)
+            if not reply_text or not reply_text.strip():
+                reply_text = (
+                    "(The model returned an empty reply twice. This usually means "
+                    "Ollama is overloaded or the context is too large. Try "
+                    "a shorter question, restart Ollama, or run `python main.py "
+                    "decay` to thin out memory.)"
+                )
+
         self.memory.store(
             session_id=session_id,
             user_id=user_id,
