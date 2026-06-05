@@ -16,9 +16,11 @@ yfinance==0.2.43
 jugaad-data==0.27
 nsetools==1.0.11
 
-# Technical indicators. Using the patched master commit because the PyPI
-# release is incompatible with numpy 2.x.
-pandas-ta @ git+https://github.com/twopirllc/pandas-ta.git@development
+# Technical indicators. The original twopirllc/pandas-ta repo was taken
+# down in 2025; pandas-ta-classic is the actively maintained community
+# fork with numpy 2.x compatibility fixed. Same API surface (import as
+# `pandas_ta`), so our indicator wrappers don't change.
+pandas-ta-classic==0.4.20
 
 # ---- Sprint 3+: browser ops ----
 playwright==1.47.0
