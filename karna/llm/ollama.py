@@ -37,11 +37,13 @@ class OllamaClient:
         self,
         host: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: float = 120.0,
+        timeout: Optional[float] = None,
     ):
         self.host = (host or settings.ollama_host).rstrip("/")
         self.model = model or settings.ollama_model
-        self._client = httpx.Client(timeout=timeout)
+        self._client = httpx.Client(
+            timeout=timeout if timeout is not None else settings.ollama_timeout_secs
+        )
 
     # ---------- public API ----------
 

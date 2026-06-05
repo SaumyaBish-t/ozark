@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b"
     ollama_embed_model: str = "nomic-embed-text"  # 768-dim, ~270MB, fast
+    # Generation can take 2-3 min on CPU with a 4-9B model when the prompt
+    # is full of recall + market context. 300s is safe for CPU; bump up
+    # if you see timeouts, drop down if you have a GPU.
+    ollama_timeout_secs: float = 300.0
     openai_api_key: Optional[str] = None
     openai_fallback_model: str = "gpt-4o-mini"
 
