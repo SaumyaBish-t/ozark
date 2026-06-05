@@ -12,9 +12,15 @@
 # ---- Sprint 3: market data ----
 numpy==2.1.3
 pandas==2.2.3
-yfinance==0.2.43
 jugaad-data==0.27
 nsetools==1.0.11
+# yfinance is intentionally NOT pinned here — jugaad-data 0.27 hard-pins
+# beautifulsoup4==4.9.3, which conflicts with yfinance's >=4.11.1 demand.
+# When we need a yfinance fallback (Sprint 4+), install it AFTER everything
+# else, ignoring deps:
+#     pip install --no-deps yfinance==0.2.43
+# yfinance works fine with the bs4 4.9.x that jugaad-data brings in;
+# it just refuses to install in the normal resolver because of the pin.
 
 # Technical indicators. The original twopirllc/pandas-ta repo was taken
 # down in 2025; pandas-ta-classic is the actively maintained community
