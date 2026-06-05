@@ -68,7 +68,10 @@ class DataRouter:
                 self.cache.put_quote(q)
                 return q
             except Exception as e:
-                log.warning("quote provider %s failed for %s: %s", name, ticker, e)
+                # Per-attempt failures are NOT errors — the chain exists to
+                # absorb them. Default to debug so /price isn't noisy; the
+                # final raise below surfaces the issue if everything fails.
+                log.debug("quote provider %s failed for %s: %s", name, ticker, e)
                 last_err = e
                 continue
         raise ProviderError("router", f"all providers failed for {ticker}: {last_err}")
@@ -99,7 +102,7 @@ class DataRouter:
                 self.cache.put_ohlcv(ticker, df, interval=interval)
                 return df
             except Exception as e:
-                log.warning("ohlcv provider %s failed for %s: %s", name, ticker, e)
+                log.debug("ohlcv provider %s failed for %s: %s", name, ticker, e)
                 last_err = e
                 continue
         raise ProviderError("router", f"all ohlcv providers failed for {ticker}: {last_err}")
